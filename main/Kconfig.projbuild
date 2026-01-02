@@ -1,0 +1,136 @@
+mainmenu "HomeBridge Applicaiton Setting"
+     menu "MQTT Broker Configuration"
+
+        config BROKER_URL
+            string "Broker URL"
+            default "mqtt://10.100.1.16"
+            help
+                URL of the broker to connect to
+
+        config BROKER_USERID
+            string "MQTT UserId"
+            default ""
+
+        config BROKER_PASSWORD
+            string "MQTT Password"
+            default ""
+
+        config BROKER_NETWORK_TOPIC
+            string "Subscription Topic"
+            default "sknSensors"
+
+        config BROKER_NETWORK_LWTP
+            string "Last Will Topic"
+            default "sknSensors/LWTP"
+
+        config BROKER_NETWORK_BROADCAST
+            string "Last Will Topic"
+            default "sknSensors/$broadcast"
+    endmenu
+    menu "FT6x36 Touch Settings"
+        config I2C_MASTER_FREQUENCY
+            int "I2C Speed"
+            default 100000
+        config I2C_MASTER_PORT_NUM 
+            int "Master I2C Port 0-2"
+            default 0
+        config TOUCH_I2C_SDA_GPIO
+            int "TOUCH SDA GPIO"
+            default 38
+        config TOUCH_I2C_SCK_GPIO
+            int "TOUCH SCK GPIO"
+            default 39
+    endmenu
+    menu "LCD Panel Resolution Settings"
+        config LCD_H_RES
+            int "Horizontal Pixels"
+            default 320
+        config LCD_V_RES
+            int "Vertical Pixels"
+            default 480
+        config LCD_CMD_BITS
+            int "LCD Command Bits"
+            default 8
+        config LCD_PARAM_BITS
+            int "LCD Param Bits"
+            default 8
+        config LCD_BUS_WIDTH
+            int "LCD Param Bits 16|8"
+            default 16            
+        config LCD_PIXEL_CLOCK_HZ
+            int "LCD Panel Speed"
+            default 20000000
+        config LCD_BUFFER_SIZE_FACTOR
+            int "Numeric factor used to determine bouble buffer and transfer buffer sizes, range 10 - 24, lower better"
+            default 10
+    endmenu 
+    menu "ILI9488 LCD Controller Settings"
+        config LCD_BACK_LIGHT_ON_LEVEL
+            int "Backlight Level"
+            default 1
+        config LCD_BACK_LIGHT_GPIO
+            int "Backlight GPIO"
+            default 46
+        config LCD_CS_GPIO
+            int "CS GPIO"
+            default -1
+        config LCD_RST_GPIO
+            int "Reset GPIO"
+            default 48
+        config LCD_DC_GPIO
+            int "Data command DC/RS"
+            default 45
+        config LCD_WR_GPIO
+            int "WR/PCLK GPIO"
+            default 18
+    endmenu    
+    menu "ILI9488 LCD Data Pins"            
+        config LCD_D00_GPIO
+            int "D0 GPIO"
+            default 47
+        config LCD_D01_GPIO
+            int "D1 GPIO"
+            default 21
+        config LCD_D02_GPIO
+            int "D2 GPIO"
+            default 14
+        config LCD_D03_GPIO
+            int "D3 GPIO"
+            default 13
+        config LCD_D04_GPIO
+            int "D4 GPIO"
+            default 12
+        config LCD_D05_GPIO
+            int "D5 GPIO"
+            default 11
+        config LCD_D06_GPIO
+            int "D6 GPIO"
+            default 10
+        config LCD_D07_GPIO
+            int "D7 GPIO"
+            default 9
+        config LCD_D08_GPIO
+            int "D8 GPIO"
+            default 3
+        config LCD_D09_GPIO
+            int "D9 GPIO"
+            default 8
+        config LCD_D10_GPIO
+            int "D10 GPIO"
+            default 16
+        config LCD_D11_GPIO
+            int "D11 GPIO"
+            default 15
+        config LCD_D12_GPIO
+            int "D12 GPIO"
+            default 7
+        config LCD_D13_GPIO
+            int "D13 GPIO"
+            default 6
+        config LCD_D14_GPIO
+            int "D14 GPIO"
+            default 5
+        config LCD_D15_GPIO
+            int "D15 GPIO"
+            default 4
+    endmenu
