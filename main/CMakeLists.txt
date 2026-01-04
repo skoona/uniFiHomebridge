@@ -1,3 +1,4 @@
 idf_component_register(SRCS "main_base.c"
-                    PRIV_REQUIRES mqtt wifi_network esp_psram
+                    REQUIRES wifi_network
+                    PRIV_REQUIRES mqtt spiffs esp_timer esp_driver_ledc esp_driver_gpio esp_psram
                     INCLUDE_DIRS ".")

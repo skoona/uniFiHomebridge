@@ -17,14 +17,14 @@ mainmenu "HomeBridge Applicaiton Setting"
 
         config BROKER_NETWORK_TOPIC
             string "Subscription Topic"
-            default "sknSensors"
+            default "sknSensors/#"
 
         config BROKER_NETWORK_LWTP
             string "Last Will Topic"
-            default "sknSensors/LWTP"
+            default "sknSensors/LWT"
 
         config BROKER_NETWORK_BROADCAST
-            string "Last Will Topic"
+            string "All Nodes Broadcast Channel (v4)"
             default "sknSensors/$broadcast"
     endmenu
     menu "FT6x36 Touch Settings"
