@@ -40,6 +40,22 @@
 
 static const char *TAG = "main";
 
+void logMemoryStats(char *message)
+{
+    ESP_LOGI(TAG, "[APP] %s...", message);
+    ESP_LOGI(TAG, "[APP]       IDF version: %s", esp_get_idf_version());
+    ESP_LOGI(TAG, "[APP]       Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "Internal free heap size: %ld bytes", esp_get_free_internal_heap_size());
+    ESP_LOGI(TAG, "PSRAM    free heap size: %ld bytes", esp_get_free_heap_size() - esp_get_free_internal_heap_size());
+    ESP_LOGI(TAG, "Total    free heap size: %ld bytes", esp_get_free_heap_size());
+}
+static void log_error_if_nonzero(const char *message, int error_code)
+{
+    if (error_code != 0)
+    {
+        ESP_LOGE(TAG, "Last error %s: 0x%x", message, error_code);
+    }
+}
 esp_err_t skn_beep_init()
 {
     ESP_LOGI(TAG, "skn_beep_init(): Initializing");
@@ -186,7 +202,6 @@ esp_err_t writeBinaryImageFile(char *path, void *buffer, int bufLen) {
 
     return ESP_OK;
 }
-    
 esp_err_t writeBase64Buffer(char *path, const unsigned char *input_buffer, int data_len)
 {
     unsigned char *output_buffer;
@@ -243,7 +258,7 @@ esp_err_t prettyPrintJSON(char * content, int contentLen) {
     return ESP_OK;
 }
 
-esp_err_t skn_parse_msg(esp_mqtt_event_handle_t event) {
+esp_err_t skn_parse_event_msg(esp_mqtt_event_handle_t event) {
     static char path[32] = {0};
     static char device[16] = {0};
     static char topic[128] = {0};
@@ -258,7 +273,7 @@ esp_err_t skn_parse_msg(esp_mqtt_event_handle_t event) {
         return ESP_OK;
     }
 
-    printf("%s:\t", topic);
+    printf("%.*s:\t", event->topic_len, event->topic);
 
     if (imageTransaction || jsonTransaction) {
         if (content == NULL)
@@ -298,10 +313,12 @@ esp_err_t skn_parse_msg(esp_mqtt_event_handle_t event) {
         // 'unifi/protect/<device>/snapshot' --> 'unifi/protect/+/snapshot'
         //  012345678901234
         strncpy(topic, event->topic, event->topic_len);
+        topic[event->topic_len] = '\0';
         strncpy(device, &event->topic[14], 12);
+        device[12] = '\0';
+
         sprintf(path,"/spiffs/%s.jpg", device);
         ESP_LOGI("skn_parse_msg()", "Generating image file path: %s", path);
-        ESP_LOGI("skn_parse_msg()", "Topic=%s, DataLen=%d, Total DataLen=%d, Data Offset=%d", topic, event->data_len, event->total_data_len, event->current_data_offset);
 
         if (event->data_len != event->total_data_len) {
             content = calloc(event->total_data_len+4, sizeof(uint8_t));
@@ -323,9 +340,9 @@ esp_err_t skn_parse_msg(esp_mqtt_event_handle_t event) {
 
     } else if ( event->data[0] == '{') {
         strncpy(topic, event->topic, event->topic_len);
+        topic[event->topic_len] = '\0';
         strncpy(device, &event->topic[14], 12);
-
-        ESP_LOGI("skn_parse_msg()", "Topic=%s, DataLen=%d, Total DataLen=%d, Data Offset=%d", topic, event->data_len, event->total_data_len, event->current_data_offset);
+        device[12] = '\0';
 
         if (event->data_len != event->total_data_len) {
             content = calloc(event->total_data_len + 4, sizeof(uint8_t));
@@ -352,23 +369,6 @@ esp_err_t skn_parse_msg(esp_mqtt_event_handle_t event) {
     return ESP_OK;
 }
 
-void logMemoryStats(char *message) {
-    ESP_LOGI(TAG, "[APP] %s...", message);
-    ESP_LOGI(TAG, "[APP]       IDF version: %s", esp_get_idf_version());
-    ESP_LOGI(TAG, "[APP]       Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
-    ESP_LOGI(TAG, "Internal free heap size: %ld bytes", esp_get_free_internal_heap_size());
-    ESP_LOGI(TAG, "PSRAM    free heap size: %ld bytes", esp_get_free_heap_size() - esp_get_free_internal_heap_size());
-    ESP_LOGI(TAG, "Total    free heap size: %ld bytes", esp_get_free_heap_size());
-}
-
-static void log_error_if_nonzero(const char *message, int error_code)
-{
-    if (error_code != 0)
-    {
-        ESP_LOGE(TAG, "Last error %s: 0x%x", message, error_code);
-    }
-}
-
 /*
  * MQTT topic/data values are present on first receipt
  * - topic is not provided on segmented message
@@ -390,7 +390,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         msg_id = esp_mqtt_client_publish(client, CONFIG_BROKER_NETWORK_BROADCAST, "Elecrow32-02 Online", 0, 1, 0);
         ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
 
-        msg_id = esp_mqtt_client_subscribe(client, CONFIG_BROKER_NETWORK_TOPIC, 0); // "unifi/protect/#/ambientlight", 0);
+        msg_id = esp_mqtt_client_subscribe(client, CONFIG_BROKER_NETWORK_TOPIC, 0); 
         ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d, topic=%s", msg_id, CONFIG_BROKER_NETWORK_TOPIC);
 
         msg_id = esp_mqtt_client_subscribe(client, "unifi/protect/+/motion", 0);
@@ -399,7 +399,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
         break;
-
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
         break;
@@ -411,7 +410,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        skn_parse_msg(event);
+        skn_parse_event_msg(event);
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
