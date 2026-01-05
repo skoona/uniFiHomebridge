@@ -30,14 +30,13 @@ extern char *TAG; //  = "Display";
 
 const uint32_t panel_Hres = CONFIG_LCD_H_RES;
 const uint32_t panel_Vres = CONFIG_LCD_V_RES;
-extern void skn_touch_event_handler(lv_event_t *e);
+char lastImageFile[256] = {0};
 extern void ui_skoona_page(lv_obj_t *scr);
 extern void skn_touch_init();
 extern void logMemoryStats(char *message);
 extern esp_err_t skn_beep_init();
 extern esp_err_t skn_beep();
 extern esp_err_t fileList();
-extern QueueHandle_t imageServiceQueue;
 
 void standBy(char *message) {
 	lv_obj_t *standby;
@@ -64,11 +63,9 @@ void standBy(char *message) {
 }
 
 void skn_image_handler_cb(lv_timer_t *timer) {
-	
-	char path[256] = {0}; // Used to receive data
-	char image[288] = {"S:"};
+	char path[257] = {0}; // Used to receive data
+	QueueHandle_t ImageQueue = (QueueHandle_t)timer->user_data;
 	BaseType_t xReturn; // Used to receive return value
-	// QueueHandle_t ImageQueue = (QueueHandle_t)timer->user_data;
 	static lv_obj_t *currentImage = NULL;
 	static lv_style_t image_style;
 	uint64_t startTime = esp_timer_get_time();
@@ -79,20 +76,25 @@ void skn_image_handler_cb(lv_timer_t *timer) {
 	lv_style_set_x(&image_style, 2);
 	lv_style_set_max_width(&image_style, panel_Vres - 2);
 
-
-	xReturn = xQueueReceive(imageServiceQueue, path, 0);
-	if (xReturn == pdTRUE) {
-		startTime = esp_timer_get_time();
-		ESP_LOGI("ImageService", "skn_image_handler_cb() Entered...");
+	xReturn = xQueueReceive(ImageQueue, path, 0);
+	if (xReturn == pdTRUE) {		
+		if (strlen(path) < 5) {
+			ESP_LOGE("ImageService", "skn_image_handler_cb() Guarding:  Image file path empty...");
+			return;
+		}
 
 		standBy("Please StandBy...");
+
+		startTime = esp_timer_get_time();
+		ESP_LOGI("ImageService", "skn_image_handler_cb() Entered...");
+		
+		strcpy(lastImageFile, path); // save filename
 
 		ESP_LOGI("ImageService", "Received image file: %s", path);
 
 		currentImage = lv_img_create(lv_screen_active());
 		if (currentImage != NULL) {
-			sprintf(image, "S:%s", path);
-			lv_img_set_src(currentImage, image);
+			lv_img_set_src(currentImage, path);
 			lv_obj_add_style(currentImage, &image_style, 0);
 			lv_image_set_inner_align(currentImage, LV_IMAGE_ALIGN_STRETCH);
 			ESP_LOGI("ImageService", "Completed processing for image file: %s", path);
@@ -272,7 +274,7 @@ void vDisplayServiceTask(void *pvParameters) {
 
 	/*
 	 * Poll for Image Request every three seconds */
-	lv_timer_create(skn_image_handler_cb, 3000, NULL);
+	lv_timer_create(skn_image_handler_cb, 3000, (QueueHandle_t)pvParameters);
 
 	while (1) {
 		lv_timer_periodic_handler();
