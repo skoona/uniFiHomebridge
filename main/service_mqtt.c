@@ -30,7 +30,6 @@
 
 extern esp_err_t fileList();
 extern void skn_beep(uint32_t duration_ms);
-extern QueueHandle_t imageServiceQueue;
 
 void log_error_if_nonzero(const char *message, int error_code)
 {
@@ -40,10 +39,10 @@ void log_error_if_nonzero(const char *message, int error_code)
     }
 }
 
-esp_err_t writeBinaryImageFile(char *path, void *buffer, int bufLen) {
+esp_err_t writeBinaryImageFile(char *path, void *buffer, int bufLen)
+{
     esp_err_t ret = ESP_OK;
-    // uint written = 0;
-    // int event_file = 0;
+
     ESP_LOGI("writeBinaryImageFile()", "Proceeding with: %s", path);
 
     FILE* f = fopen(path, "wb");
@@ -60,29 +59,9 @@ esp_err_t writeBinaryImageFile(char *path, void *buffer, int bufLen) {
     }
     fclose(f);
 
-// TODO: Post path to ImageQueue
-
-/*    // #include <stdio.h> not working, open()/close() are missing
-
-    event_file = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (event_file == -1)
-    {
-        ESP_LOGE("writeBinaryImageFile()", "Failed to open %s file for writing", path);
-        return ESP_FAIL;
-    }
-    else
-    {
-        written = write(event_file, buffer, bufLen);
-        close(event_file);
-        ESP_LOGI("writeBinaryImageFile()", "File written, name: %s, bytes: %d", path, written);
-    }
-*/
-    // Create image
-    // Notify processor of written filename, queue or event
-
     return ret;
 }
-esp_err_t writeBase64Buffer(char *path, const unsigned char *input_buffer, int data_len)
+esp_err_t writeBase64Buffer(char *path, const unsigned char *input_buffer, int data_len, QueueHandle_t ImageQueue)
 {
     unsigned char *output_buffer;
     size_t output_len;
@@ -102,7 +81,8 @@ esp_err_t writeBase64Buffer(char *path, const unsigned char *input_buffer, int d
         // Decoding successful.
         ret = writeBinaryImageFile(path, output_buffer, output_len);
         if (ret == ESP_OK) {
-            xQueueSend(imageServiceQueue, path, 0);
+            // xQueueSend(imageServiceQueue, path, 0);
+            xQueueSend(ImageQueue, path, 0);
         }
     }
     else
@@ -141,8 +121,8 @@ esp_err_t prettyPrintJSON(char * content, int contentLen) {
     return ESP_OK;
 }
 
-esp_err_t skn_parse_event_msg(esp_mqtt_event_handle_t event) {
-    static char path[32] = {0};
+esp_err_t skn_parse_event_msg(esp_mqtt_event_handle_t event, QueueHandle_t ImageQueue) {
+    static char path[128] = {0};
     static char device[16] = {0};
     static char topic[128] = {0};
     static bool imageTransaction = false;
@@ -179,7 +159,7 @@ esp_err_t skn_parse_event_msg(esp_mqtt_event_handle_t event) {
             
             if (imageTransaction) {
                 ESP_LOGI("skn_parse_msg()", "END: IMAGE --> Segment handler completed for %s from %s", path, topic);
-                writeBase64Buffer(path, (const unsigned char *)&content[IMAGE_HEADER_BYTES], contentLen - IMAGE_HEADER_BYTES);
+                writeBase64Buffer(path, (const unsigned char *)&content[IMAGE_HEADER_BYTES], contentLen - IMAGE_HEADER_BYTES, ImageQueue);
                 imageTransaction = false;
                 fileList();
             } else if (jsonTransaction) {
@@ -202,7 +182,7 @@ esp_err_t skn_parse_event_msg(esp_mqtt_event_handle_t event) {
         strncpy(device, &event->topic[14], 12);
         device[12] = '\0';
 
-        sprintf(path,"/spiffs/%s.jpg", device);
+        sprintf(path,"S:/spiffs/%s.jpg", device);        
         ESP_LOGI("skn_parse_msg()", "Generating image file path: %s", path);
 
         if (event->data_len != event->total_data_len) {
@@ -220,7 +200,7 @@ esp_err_t skn_parse_event_msg(esp_mqtt_event_handle_t event) {
             }
         }
 
-        writeBase64Buffer(path, (const unsigned char *)&event->data[IMAGE_HEADER_BYTES], event->data_len - IMAGE_HEADER_BYTES);
+        writeBase64Buffer(path, (const unsigned char *)&event->data[IMAGE_HEADER_BYTES], event->data_len - IMAGE_HEADER_BYTES,  ImageQueue);
         fileList();
 
     } else if ( event->data[0] == '{') {
@@ -276,9 +256,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
         msg_id = esp_mqtt_client_subscribe(client, CONFIG_BROKER_NETWORK_TOPIC, 0); 
         ESP_LOGI("MqttService", "sent subscribe successful, msg_id=%d, topic=%s", msg_id, CONFIG_BROKER_NETWORK_TOPIC);
-
-        msg_id = esp_mqtt_client_subscribe(client, "unifi/protect/+/motion", 0);
-        ESP_LOGI("MqttService", "sent subscribe successful, msg_id=%d, topic=%s", msg_id, "unifi/protect/+/motion");
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI("MqttService", "MQTT_EVENT_DISCONNECTED");
@@ -294,7 +271,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI("MqttService", "MQTT_EVENT_DATA");
-        skn_parse_event_msg(event);
+        skn_parse_event_msg(event, (QueueHandle_t)handler_args);
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI("MqttService", "MQTT_EVENT_ERROR");
@@ -311,7 +288,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     }
 }
-esp_err_t skn_mqtt_service(void) {
+
+/*
+ * MQTT internal config determines the CoreID it runs on: see sdkConfig
+*/
+esp_err_t skn_mqtt_service(QueueHandle_t ImageQueue) {
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = CONFIG_BROKER_URL,
         .session.protocol_ver = MQTT_PROTOCOL_V_3_1_1,
@@ -323,12 +304,10 @@ esp_err_t skn_mqtt_service(void) {
         .session.last_will.msg_len = 14,
         .session.last_will.qos = 1,
         .session.last_will.retain = true,
-        // .buffer.size = (8 * 1024),
-        // .buffer.out_size = (2 * 1024),
+        // .buffer.size = (4 * 1024),
+        // .buffer.out_size = (1 * 1024),
     };
-    // current_data_offset and total_data_len
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
-    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, ImageQueue);
     return esp_mqtt_client_start(client);
 }

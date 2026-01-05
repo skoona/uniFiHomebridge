@@ -14,15 +14,17 @@
 
 extern uint32_t panel_Hres;
 extern uint32_t panel_Vres;
-
+extern QueueHandle_t imageServiceQueue;
+extern char *lastImageFile;
 extern char *TAG; //  = "Touch";
 
 extern esp_err_t fileList();
-extern QueueHandle_t urlServiceQueue;
 
 extern void skn_lvgl_touch_cb(lv_indev_t *drv, lv_indev_data_t *data);
+extern void logMemoryStats(char *message);
 
-void skn_touch_event_handler(lv_event_t *e) {
+void skn_touch_event_handler(lv_event_t *e)
+{
 	lv_point_t p;
 	lv_indev_get_point(e->user_data, &p);
 	int32_t screen_width = lv_obj_get_width(lv_scr_act());
@@ -30,14 +32,16 @@ void skn_touch_event_handler(lv_event_t *e) {
 
 	printf("-->Event: X=%3.0ld\tY=%3.0ld\tScrnX=%3.0ld\tScrnY=%3.0ld\n", p.x, p.y, screen_width, screen_height);
 	if (p.y > (screen_height / 2)) {
-		printf("Get All Cameras: y=%ld\n", p.y);
+		printf("List all tasks: y=%ld\n", p.y);
+		logMemoryStats("List all Task touch point.");
 		fileList();
 	} else if (p.x < (screen_width / 2)) {
-		printf("Get Front Door Snapshot: x=%ld\n", p.x);
+		printf("File list touch point: x=%ld\n", p.x);
 		fileList();
 	} else {
-		printf("Get Garage Snapshot: x=%ld\n", p.x);
+		printf("Display prior image: x=%ld\n", p.x);
 		fileList();
+		xQueueSend(imageServiceQueue, lastImageFile, 0);
 	}
 }
 void skn_touch_init() {
