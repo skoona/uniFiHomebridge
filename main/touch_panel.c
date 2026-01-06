@@ -41,7 +41,9 @@ void skn_touch_event_handler(lv_event_t *e)
 	} else {
 		printf("Display prior image: x=%ld\n", p.x);
 		fileList();
-		xQueueSend(imageServiceQueue, lastImageFile, 0);
+		if (strlen(lastImageFile) > 0) {
+		  xQueueSend(imageServiceQueue, lastImageFile, 0);
+		}
 	}
 }
 void skn_touch_init() {

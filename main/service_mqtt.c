@@ -47,7 +47,7 @@ esp_err_t writeBinaryImageFile(char *path, void *buffer, int bufLen)
 
     FILE* f = fopen(path, "wb");
     if (f == NULL) {
-        ESP_LOGE("MqttService", "Failed to open file for writing");
+        ESP_LOGE("MqttService", "Failed to open file for writing --> %s", path);
         return ESP_FAIL;
     }
     size_t bytes_written = fwrite(buffer, 1, bufLen, f);
@@ -182,7 +182,7 @@ esp_err_t skn_parse_event_msg(esp_mqtt_event_handle_t event, QueueHandle_t Image
         strncpy(device, &event->topic[14], 12);
         device[12] = '\0';
 
-        sprintf(path,"S:/spiffs/%s.jpg", device);        
+        sprintf(path,"/spiffs/%s.jpg", device);        
         ESP_LOGI("skn_parse_msg()", "Generating image file path: %s", path);
 
         if (event->data_len != event->total_data_len) {
