@@ -30,7 +30,7 @@ extern char *TAG; //  = "Display";
 
 const uint32_t panel_Hres = CONFIG_LCD_H_RES;
 const uint32_t panel_Vres = CONFIG_LCD_V_RES;
-char lastImageFile[256] = {0};
+char lastImageFile[260] = {0};
 extern void ui_skoona_page(lv_obj_t *scr);
 extern void skn_touch_init();
 extern void logMemoryStats(char *message);
@@ -91,7 +91,7 @@ void skn_image_handler_cb(lv_timer_t *timer) {
 		strcpy(lastImageFile, path); // save filename
 
 		ESP_LOGI("ImageService", "Received image file: %s", path);
-
+		
 		currentImage = lv_img_create(lv_screen_active());
 		if (currentImage != NULL) {
 			lv_img_set_src(currentImage, path);

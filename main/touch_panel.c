@@ -15,7 +15,7 @@
 extern uint32_t panel_Hres;
 extern uint32_t panel_Vres;
 extern QueueHandle_t imageServiceQueue;
-extern char *lastImageFile;
+extern char lastImageFile[];
 extern char *TAG; //  = "Touch";
 
 extern esp_err_t fileList();
@@ -39,7 +39,7 @@ void skn_touch_event_handler(lv_event_t *e)
 		printf("File list touch point: x=%ld\n", p.x);
 		fileList();
 	} else {
-		printf("Display prior image: x=%ld\n", p.x);
+		printf("Display prior image: x=%ld, %s\n", p.x, lastImageFile);
 		fileList();
 		if (strlen(lastImageFile) > 0) {
 		  xQueueSend(imageServiceQueue, lastImageFile, 0);
