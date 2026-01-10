@@ -2,7 +2,9 @@
  * rgb_panel.c
  */
 
+#include <stdio.h>
 #include "driver/gpio.h"
+#include "driver/i2c.h"
 #include "esp_err.h"
 #include "esp_lcd_ili9488.h"
 #include "esp_lcd_panel_io.h"
@@ -16,7 +18,6 @@
 #include "freertos/task.h"
 #include "jpeg_decoder.h"
 #include "lvgl.h"
-#include <stdio.h>
 
 extern char *TAG; //  = "Display";
 
@@ -31,8 +32,14 @@ extern char *TAG; //  = "Display";
 const uint32_t panel_Hres = CONFIG_LCD_H_RES;
 const uint32_t panel_Vres = CONFIG_LCD_V_RES;
 char lastImageFile[260] = {0};
+static esp_lcd_panel_handle_t panel_handle = NULL;
+static lv_display_t *display; // contains callback functions
+static esp_lcd_touch_handle_t touch_handle = NULL;
+static lv_indev_t *lvgl_touch_indev = NULL;
+
+extern QueueHandle_t imageServiceQueue;
+
 extern void ui_skoona_page(lv_obj_t *scr);
-extern void skn_touch_init();
 extern void logMemoryStats(char *message);
 extern esp_err_t skn_beep_init();
 extern esp_err_t skn_beep();
@@ -61,7 +68,6 @@ void standBy(char *message) {
 
 	ESP_LOGI("Services", "standBy(): Exit...");
 }
-
 void skn_image_handler_cb(lv_timer_t *timer) {
 	char path[257] = {0}; // Used to receive data
 	QueueHandle_t ImageQueue = (QueueHandle_t)timer->user_data;
@@ -70,11 +76,6 @@ void skn_image_handler_cb(lv_timer_t *timer) {
 	static lv_style_t image_style;
 	uint64_t startTime = esp_timer_get_time();
 
-	lv_style_init(&image_style);
-	lv_style_set_y(&image_style, 2);
-	lv_style_set_max_height(&image_style, panel_Hres - 2);
-	lv_style_set_x(&image_style, 2);
-	lv_style_set_max_width(&image_style, panel_Vres - 2);
 
 	xReturn = xQueueReceive(ImageQueue, path, 0);
 	if (xReturn == pdTRUE) {		
@@ -82,6 +83,14 @@ void skn_image_handler_cb(lv_timer_t *timer) {
 			ESP_LOGE("ImageService", "skn_image_handler_cb() Guarding:  Image file path empty...");
 			return;
 		}
+
+		lv_lock();
+
+		lv_style_init(&image_style);
+		lv_style_set_y(&image_style, 2);
+		lv_style_set_max_height(&image_style, panel_Hres - 2);
+		lv_style_set_x(&image_style, 2);
+		lv_style_set_max_width(&image_style, panel_Vres - 2);
 
 		standBy("Please StandBy...");
 
@@ -103,6 +112,7 @@ void skn_image_handler_cb(lv_timer_t *timer) {
 		}		
 		
 		ESP_LOGI("ImageService", "skn_image_handler_cb() Exiting... DurationMicro: %lld", (esp_timer_get_time() - startTime) );
+		lv_unlock();
 	}
 
 }
@@ -113,8 +123,7 @@ static bool skn_notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
 	lv_disp_flush_ready(disp_driver);
 	return false;
 }
-static void skn_lvgl_flush_cb(lv_display_t *display, const lv_area_t *area,
-							  uint8_t *color_map) {
+static void skn_lvgl_flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *color_map) {
 	esp_lcd_panel_handle_t panel_handle =
 		(esp_lcd_panel_handle_t)display->user_data;
 
@@ -147,17 +156,97 @@ void skn_lvgl_touch_cb(lv_indev_t *drv, lv_indev_data_t *data) {
 		data->state = LV_INDEV_STATE_RELEASED;
 	}
 }
+void skn_touch_event_handler(lv_event_t *e) {
+	lv_point_t p;
+	lv_indev_get_point(e->user_data, &p);
+	int32_t screen_width = lv_obj_get_width(lv_scr_act());
+	int32_t screen_height = lv_obj_get_height(lv_scr_act());
 
-void vDisplayServiceTask(void *pvParameters) {
+	printf("-->Event: X=%3.0ld\tY=%3.0ld\tScrnX=%3.0ld\tScrnY=%3.0ld\n", p.x, p.y, screen_width, screen_height);
+	if (p.y > (screen_height / 2))
+	{
+		printf("List all tasks: y=%ld\n", p.y);
+		logMemoryStats("List all Task touch point.");
+		fileList();
+	}
+	else if (p.x < (screen_width / 2))
+	{
+		printf("File list touch point: x=%ld\n", p.x);
+		fileList();
+	}
+	else
+	{
+		printf("Display prior image: x=%ld, %s\n", p.x, lastImageFile);
+		fileList();
+		if (strlen(lastImageFile) > 0)
+		{
+			xQueueSend(imageServiceQueue, lastImageFile, 0);
+		}
+	}
+}
+esp_err_t skn_touch_init() {
+	ESP_LOGI("Touch", "Initialize I2C");
 
-	static lv_display_t *display; // contains callback functions
+	const i2c_config_t i2c_conf = {
+		.mode = I2C_MODE_MASTER,
+		.sda_io_num = CONFIG_TOUCH_I2C_SDA_GPIO,
+		.scl_io_num = CONFIG_TOUCH_I2C_SCK_GPIO,
+		.sda_pullup_en = GPIO_PULLUP_ENABLE,
+		.scl_pullup_en = GPIO_PULLUP_ENABLE,
+		.master.clk_speed = CONFIG_I2C_MASTER_FREQUENCY,
+	};
+	// Initialize I2C
+	ESP_ERROR_CHECK(i2c_param_config(CONFIG_I2C_MASTER_PORT_NUM, &i2c_conf));
+	ESP_ERROR_CHECK(i2c_driver_install(CONFIG_I2C_MASTER_PORT_NUM, i2c_conf.mode, 0, 0, 0));
 
-	ESP_LOGI(TAG, "Turn off LCD backlight");
-	gpio_config_t bk_gpio_config = {
-		.mode = GPIO_MODE_OUTPUT, .pin_bit_mask = 1ULL << CONFIG_LCD_BACK_LIGHT_GPIO};
-	ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
-	gpio_set_level(CONFIG_LCD_BACK_LIGHT_GPIO, !CONFIG_LCD_BACK_LIGHT_ON_LEVEL);
+	esp_lcd_panel_io_i2c_config_t tp_io_config =
+		ESP_LCD_TOUCH_IO_I2C_FT6x36_CONFIG();
 
+	ESP_LOGI("Touch", "Initialize touch IO (I2C)");
+	esp_lcd_panel_io_handle_t tp_io_handle = NULL;
+	ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(
+		(esp_lcd_i2c_bus_handle_t)CONFIG_I2C_MASTER_PORT_NUM, &tp_io_config, &tp_io_handle));
+
+	esp_lcd_touch_config_t tp_cfg = {
+		.x_max = panel_Hres,
+		.y_max = panel_Vres,
+		.rst_gpio_num = -1,
+		.int_gpio_num = -1,
+		.levels =
+			{
+				.reset = 0,
+				.interrupt = 0,
+			},
+		.flags =
+			{
+				.swap_xy = 1, // rotated
+				.mirror_x = 1,
+				.mirror_y = 0,
+			},
+	};
+
+	/* Initialize touch */
+	ESP_LOGI("Touch", "Initialize touch controller FT6x36");	
+	esp_err_t ret = esp_lcd_touch_new_i2c_ft6x36(tp_io_handle, &tp_cfg, &touch_handle);
+
+	/* Above Config has V/H swapped and flags set
+		esp_lcd_touch_set_swap_xy(tp,true);
+		esp_lcd_touch_set_mirror_x(tp, true);
+		esp_lcd_touch_set_mirror_y(tp, false);
+	*/
+
+	/*Create an input device for touch handling*/
+	
+	lvgl_touch_indev = lv_indev_create();
+	lv_indev_set_type(lvgl_touch_indev, LV_INDEV_TYPE_POINTER);
+	lv_indev_set_read_cb(lvgl_touch_indev, skn_lvgl_touch_cb);
+	lv_indev_set_user_data(lvgl_touch_indev, touch_handle);
+	lv_indev_add_event_cb(lvgl_touch_indev, skn_touch_event_handler, LV_EVENT_CLICKED, lvgl_touch_indev);
+
+	return ret;
+}
+
+esp_err_t skn_lcd_init() {
 	ESP_LOGI(TAG, "Initialize Intel 8080 bus");
 	esp_lcd_i80_bus_handle_t i80_bus = NULL;
 	esp_lcd_i80_bus_config_t bus_config = {
@@ -216,13 +305,13 @@ void vDisplayServiceTask(void *pvParameters) {
 	ESP_ERROR_CHECK(esp_lcd_new_panel_io_i80(i80_bus, &io_config, &io_handle));
 
 	ESP_LOGI(TAG, "Install LCD driver of ili9488");
-	esp_lcd_panel_handle_t panel_handle = NULL;
+
 	esp_lcd_panel_dev_config_t panel_config = {
 		.reset_gpio_num = CONFIG_LCD_RST_GPIO,
 		.color_space = ESP_LCD_COLOR_SPACE_BGR,
 		.bits_per_pixel = CONFIG_LCD_BUS_WIDTH,
 	};
-	ESP_ERROR_CHECK(esp_lcd_new_panel_ili9488(io_handle, &panel_config, SKN_I80_COLOR_BUFF_SZ, &panel_handle));
+	esp_err_t ret = esp_lcd_new_panel_ili9488(io_handle, &panel_config, SKN_I80_COLOR_BUFF_SZ, &panel_handle);
 
 	esp_lcd_panel_reset(panel_handle);
 	esp_lcd_panel_init(panel_handle);
@@ -235,11 +324,13 @@ void vDisplayServiceTask(void *pvParameters) {
 	 */
 	esp_lcd_panel_swap_xy(panel_handle, true);
 	esp_lcd_panel_mirror(panel_handle, true, false);
+	
+	return ret;
+}
 
-	ESP_LOGI(TAG, "Turn on LCD backlight");
-	gpio_set_level(CONFIG_LCD_BACK_LIGHT_GPIO, CONFIG_LCD_BACK_LIGHT_ON_LEVEL);
-
+esp_err_t skn_lvgl_init() {
 	ESP_LOGI(TAG, "Initialize LVGL library");
+
 	lv_init();
 	lv_tick_set_cb(skn_tick_cb);
 
@@ -261,12 +352,29 @@ void vDisplayServiceTask(void *pvParameters) {
 
 	lv_display_set_flush_cb(display, skn_lvgl_flush_cb);
 	lv_display_set_user_data(display, panel_handle);
-	
-	skn_touch_init();
 
 	esp_lv_decoder_handle_t decoder_handle = NULL;
 	esp_lv_decoder_init(&decoder_handle); // Initialize this after lvgl starts
 
+	return ESP_OK;
+}
+
+void vDisplayServiceTask(void *pvParameters) {
+
+	ESP_LOGI(TAG, "Configure and Turn off LCD backlight");
+	gpio_config_t bk_gpio_config = {
+		.mode = GPIO_MODE_OUTPUT, .pin_bit_mask = 1ULL << CONFIG_LCD_BACK_LIGHT_GPIO};
+	ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
+	gpio_set_level(CONFIG_LCD_BACK_LIGHT_GPIO, !CONFIG_LCD_BACK_LIGHT_ON_LEVEL);
+
+	ESP_ERROR_CHECK(skn_lcd_init());
+	ESP_ERROR_CHECK(skn_lvgl_init());
+	ESP_ERROR_CHECK(skn_touch_init());
+
+	ESP_LOGI(TAG, "Turn on LCD backlight");
+	gpio_set_level(CONFIG_LCD_BACK_LIGHT_GPIO, CONFIG_LCD_BACK_LIGHT_ON_LEVEL);
+
+	lv_lock();
 	lv_obj_t *scr = lv_obj_create(NULL);
 	lv_screen_load(scr);
 	
@@ -275,8 +383,11 @@ void vDisplayServiceTask(void *pvParameters) {
 	/*
 	 * Poll for Image Request every three seconds */
 	lv_timer_create(skn_image_handler_cb, 3000, (QueueHandle_t)pvParameters);
+	lv_unlock();
 
 	while (1) {
+		lv_lock();
 		lv_timer_periodic_handler();
+		lv_unlock();
 	}
 }

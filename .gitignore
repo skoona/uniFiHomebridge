@@ -6,3 +6,4 @@ managed_components/*
 .devcontainer
 .clangd
 dependencies.lock
+log.*.txt

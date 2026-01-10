@@ -25,7 +25,7 @@
 #include <sys/stat.h>
 #include "wifi_network.h"
 
-#define SKN_LVGL_PRIORITY 6
+#define SKN_LVGL_PRIORITY 4
 #define SKN_LVGL_STACK_SZ 9216 // 8192
 #define BEEP_DURATION_MS 500
 
@@ -171,7 +171,7 @@ void app_main(void) {
 	imageServiceQueue = xQueueCreate(8, 256);
 	if (imageServiceQueue != NULL) {
 		ESP_ERROR_CHECK(skn_mqtt_service(imageServiceQueue));
-		xTaskCreatePinnedToCore(vDisplayServiceTask, "SKN Display", SKN_LVGL_STACK_SZ, imageServiceQueue, SKN_LVGL_PRIORITY, NULL, tskNO_AFFINITY);
+		xTaskCreatePinnedToCore(vDisplayServiceTask, "SKN Display", SKN_LVGL_STACK_SZ, imageServiceQueue, SKN_LVGL_PRIORITY, NULL, 0);
 	} else {
 		ESP_LOGE(TAG, "Display Queues Failed.");
 	}
