@@ -32,10 +32,10 @@ extern char *TAG; //  = "Display";
 const uint32_t panel_Hres = CONFIG_LCD_H_RES;
 const uint32_t panel_Vres = CONFIG_LCD_V_RES;
 char lastImageFile[260] = {0};
-static esp_lcd_panel_handle_t panel_handle = NULL;
-static lv_display_t *display; // contains callback functions
-static esp_lcd_touch_handle_t touch_handle = NULL;
+static esp_lcd_touch_handle_t touch_panel = NULL;
+static esp_lcd_panel_handle_t lcd_panel = NULL;
 static lv_indev_t *lvgl_touch_indev = NULL;
+static lv_display_t *display; // contains callback functions
 
 extern QueueHandle_t imageServiceQueue;
 
@@ -124,14 +124,14 @@ static bool skn_notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
 	return false;
 }
 static void skn_lvgl_flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *color_map) {
-	esp_lcd_panel_handle_t panel_handle =
+	esp_lcd_panel_handle_t lcd_panel =
 		(esp_lcd_panel_handle_t)display->user_data;
 
 	int offsetx1 = area->x1;
 	int offsetx2 = area->x2;
 	int offsety1 = area->y1;
 	int offsety2 = area->y2;
-	esp_lcd_panel_draw_bitmap(panel_handle, offsetx1, offsety1, offsetx2 + 1,
+	esp_lcd_panel_draw_bitmap(lcd_panel, offsetx1, offsety1, offsetx2 + 1,
 							  offsety2 + 1, color_map);
 	lv_display_flush_ready(display);
 }
@@ -184,6 +184,7 @@ void skn_touch_event_handler(lv_event_t *e) {
 		}
 	}
 }
+
 esp_err_t skn_touch_init() {
 	ESP_LOGI("Touch", "Initialize I2C");
 
@@ -227,7 +228,7 @@ esp_err_t skn_touch_init() {
 
 	/* Initialize touch */
 	ESP_LOGI("Touch", "Initialize touch controller FT6x36");	
-	esp_err_t ret = esp_lcd_touch_new_i2c_ft6x36(tp_io_handle, &tp_cfg, &touch_handle);
+	esp_err_t ret = esp_lcd_touch_new_i2c_ft6x36(tp_io_handle, &tp_cfg, &touch_panel);
 
 	/* Above Config has V/H swapped and flags set
 		esp_lcd_touch_set_swap_xy(tp,true);
@@ -240,7 +241,7 @@ esp_err_t skn_touch_init() {
 	lvgl_touch_indev = lv_indev_create();
 	lv_indev_set_type(lvgl_touch_indev, LV_INDEV_TYPE_POINTER);
 	lv_indev_set_read_cb(lvgl_touch_indev, skn_lvgl_touch_cb);
-	lv_indev_set_user_data(lvgl_touch_indev, touch_handle);
+	lv_indev_set_user_data(lvgl_touch_indev, touch_panel);
 	lv_indev_add_event_cb(lvgl_touch_indev, skn_touch_event_handler, LV_EVENT_CLICKED, lvgl_touch_indev);
 
 	return ret;
@@ -311,19 +312,19 @@ esp_err_t skn_lcd_init() {
 		.color_space = ESP_LCD_COLOR_SPACE_BGR,
 		.bits_per_pixel = CONFIG_LCD_BUS_WIDTH,
 	};
-	esp_err_t ret = esp_lcd_new_panel_ili9488(io_handle, &panel_config, SKN_I80_COLOR_BUFF_SZ, &panel_handle);
+	esp_err_t ret = esp_lcd_new_panel_ili9488(io_handle, &panel_config, SKN_I80_COLOR_BUFF_SZ, &lcd_panel);
 
-	esp_lcd_panel_reset(panel_handle);
-	esp_lcd_panel_init(panel_handle);
-	esp_lcd_panel_invert_color(panel_handle, false);
-	esp_lcd_panel_set_gap(panel_handle, 0, 0);
+	esp_lcd_panel_reset(lcd_panel);
+	esp_lcd_panel_init(lcd_panel);
+	esp_lcd_panel_invert_color(lcd_panel, false);
+	esp_lcd_panel_set_gap(lcd_panel, 0, 0);
 
 	/*
 	 * Rotate LCD display
 	 * - following lv_display_create has x/y/ reversed
 	 */
-	esp_lcd_panel_swap_xy(panel_handle, true);
-	esp_lcd_panel_mirror(panel_handle, true, false);
+	esp_lcd_panel_swap_xy(lcd_panel, true);
+	esp_lcd_panel_mirror(lcd_panel, true, false);
 	
 	return ret;
 }
@@ -351,7 +352,7 @@ esp_err_t skn_lvgl_init() {
 	lv_display_set_buffers(display, buf1, buf2, SKN_DRAW_BUFF_SZ, LV_DISPLAY_RENDER_MODE_PARTIAL);
 
 	lv_display_set_flush_cb(display, skn_lvgl_flush_cb);
-	lv_display_set_user_data(display, panel_handle);
+	lv_display_set_user_data(display, lcd_panel);
 
 	esp_lv_decoder_handle_t decoder_handle = NULL;
 	esp_lv_decoder_init(&decoder_handle); // Initialize this after lvgl starts
