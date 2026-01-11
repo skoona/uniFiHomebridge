@@ -11,6 +11,6 @@
 Implements MQTT v3 listener from HomeBridge's UniFi Protect Plugin and displays the snapshot of the alert on the display.
 
 ### See
-uniFiCB
+[uniFiWebHook](https://github.com/skoona/uniFiWebHook)
 
 Author: skoona@gmail.com
