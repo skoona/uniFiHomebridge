@@ -170,12 +170,14 @@ void app_main(void) {
 	
 	imageServiceQueue = xQueueCreate(8, 256);
 	if (imageServiceQueue != NULL) {
-		ESP_ERROR_CHECK(skn_mqtt_service(imageServiceQueue));
 		xTaskCreatePinnedToCore(vDisplayServiceTask, "SKN Display", SKN_LVGL_STACK_SZ, imageServiceQueue, SKN_LVGL_PRIORITY, NULL, 0);
 	} else {
 		ESP_LOGE(TAG, "Display Queues Failed.");
 	}
 	
 	skn_beep(BEEP_DURATION_MS);
+
+	ESP_ERROR_CHECK(skn_mqtt_service(imageServiceQueue));
+
 	logMemoryStats("Startup Complete...");
 }

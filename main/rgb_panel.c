@@ -45,29 +45,7 @@ extern esp_err_t skn_beep_init();
 extern esp_err_t skn_beep();
 extern esp_err_t fileList();
 
-void standBy(char *message) {
-	lv_obj_t *standby;
-	static lv_style_t style_red;
 
-	if (message == NULL)
-		return;
-
-	skn_beep(BEEP_DURATION_MS);
-	ESP_LOGI("Services", "standBy(): Enter...");
-
-	lv_style_init(&style_red);
-	lv_style_set_text_font(&style_red, &lv_font_montserrat_32);
-	lv_style_set_bg_color(&style_red, lv_color_make(128, 128, 128));
-	lv_style_set_bg_opa(&style_red, LV_OPA_COVER);
-	lv_style_set_text_color(&style_red, lv_color_make(0xff, 0x00, 0x00));
-
-	standby = lv_label_create(lv_screen_active());
-	lv_label_set_text(standby, message);
-	lv_obj_add_style(standby, &style_red, 0);
-	lv_obj_center(standby);
-
-	ESP_LOGI("Services", "standBy(): Exit...");
-}
 void skn_image_handler_cb(lv_timer_t *timer) {
 	char path[257] = {0}; // Used to receive data
 	QueueHandle_t ImageQueue = (QueueHandle_t)timer->user_data;
@@ -91,8 +69,6 @@ void skn_image_handler_cb(lv_timer_t *timer) {
 		lv_style_set_max_height(&image_style, panel_Hres - 2);
 		lv_style_set_x(&image_style, 2);
 		lv_style_set_max_width(&image_style, panel_Vres - 2);
-
-		standBy("Please StandBy...");
 
 		startTime = esp_timer_get_time();
 		ESP_LOGI("ImageService", "skn_image_handler_cb() Entered...");
