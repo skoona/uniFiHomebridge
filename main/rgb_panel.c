@@ -23,11 +23,9 @@ extern char *TAG; //  = "Display";
 
 #define BEEP_DURATION_MS 500
 
-#define SKN_COLOR_BYTE_SZ     sizeof(uint16_t)
-#define SKN_I80_PIXELS_CNT    (CONFIG_LCD_H_RES * CONFIG_LCD_V_RES)
-#define SKN_DRAW_BUFF_SZ      ((SKN_I80_PIXELS_CNT / CONFIG_LCD_BUFFER_SIZE_FACTOR) * SKN_COLOR_BYTE_SZ )
-#define SKN_I80_COLOR_BUFF_SZ (SKN_DRAW_BUFF_SZ / 4 )
-#define SKN_TRANSFER_BUFF_SZ  (SKN_DRAW_BUFF_SZ  + 32)
+#define SKN_BUFFER_BASE (CONFIG_LCD_V_RES * CONFIG_LCD_BUFFER_SIZE_FACTOR)
+#define SKN_DRAW_BUFF_SZ (SKN_BUFFER_BASE * sizeof(lv_color_t))
+#define SKN_TRANSFER_BUFF_SZ (SKN_BUFFER_BASE * CONFIG_LCD_BUFFER_SIZE_FACTOR * sizeof(uint16_t))
 
 const uint32_t panel_Hres = CONFIG_LCD_H_RES;
 const uint32_t panel_Vres = CONFIG_LCD_V_RES;
@@ -288,7 +286,7 @@ esp_err_t skn_lcd_init() {
 		.color_space = ESP_LCD_COLOR_SPACE_BGR,
 		.bits_per_pixel = CONFIG_LCD_BUS_WIDTH,
 	};
-	esp_err_t ret = esp_lcd_new_panel_ili9488(io_handle, &panel_config, SKN_I80_COLOR_BUFF_SZ, &lcd_panel);
+	esp_err_t ret = esp_lcd_new_panel_ili9488(io_handle, &panel_config, SKN_DRAW_BUFF_SZ, &lcd_panel);
 
 	esp_lcd_panel_reset(lcd_panel);
 	esp_lcd_panel_init(lcd_panel);
@@ -315,17 +313,17 @@ esp_err_t skn_lvgl_init() {
 	display = lv_display_create(CONFIG_LCD_V_RES, CONFIG_LCD_H_RES);
 
 	// initialize LVGL draw buffers
-	printf("Color Sz: %d\tlv_color_t: %d\tDraw buffer: %'.0u\tTransfer "
-		   "buffer: %'.0u\tPixel Cnt: %'.0u\n",
+	printf("[BUFFERS]--> Color Sz: %d\tlv_color_t: %d\tDraw buffer: %'.0u\tTransfer "
+		   "buffer: %'.0u\tBuffer base: %'.0u\n",
 		   lv_color_format_get_size(lv_display_get_color_format(display)),
 		   sizeof(lv_color_t), SKN_DRAW_BUFF_SZ, SKN_TRANSFER_BUFF_SZ,
-		   SKN_I80_PIXELS_CNT);
+		   SKN_BUFFER_BASE);
 
 	uint8_t *buf1 = heap_caps_malloc(SKN_DRAW_BUFF_SZ, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
 	assert(buf1);
 	uint8_t *buf2 = heap_caps_malloc(SKN_DRAW_BUFF_SZ, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
 	assert(buf2);
-	lv_display_set_buffers(display, buf1, buf2, SKN_DRAW_BUFF_SZ, LV_DISPLAY_RENDER_MODE_PARTIAL);
+	lv_display_set_buffers(display, buf1, buf2, SKN_BUFFER_BASE, LV_DISPLAY_RENDER_MODE_PARTIAL);
 
 	lv_display_set_flush_cb(display, skn_lvgl_flush_cb);
 	lv_display_set_user_data(display, lcd_panel);

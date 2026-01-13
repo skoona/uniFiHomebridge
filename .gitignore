@@ -7,3 +7,4 @@ managed_components/*
 .clangd
 dependencies.lock
 log.*.txt
+sdkconfig
