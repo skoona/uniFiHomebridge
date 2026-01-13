@@ -23,9 +23,9 @@ extern char *TAG; //  = "Display";
 
 #define BEEP_DURATION_MS 500
 
-#define SKN_BUFFER_BASE (CONFIG_LCD_V_RES * CONFIG_LCD_BUFFER_SIZE_FACTOR)
-#define SKN_DRAW_BUFF_SZ (SKN_BUFFER_BASE * sizeof(lv_color_t))
-#define SKN_TRANSFER_BUFF_SZ (SKN_BUFFER_BASE * CONFIG_LCD_BUFFER_SIZE_FACTOR * sizeof(uint16_t))
+#define SKN_BUFFER_BASE      (CONFIG_LCD_V_RES * CONFIG_LCD_BUFFER_SIZE_FACTOR)
+#define SKN_DRAW_BUFF_SZ     (SKN_BUFFER_BASE * sizeof(lv_color_t))
+#define SKN_TRANSFER_BUFF_SZ (CONFIG_LCD_V_RES * (CONFIG_LCD_BUFFER_SIZE_FACTOR * 2) * sizeof(uint16_t))
 
 const uint32_t panel_Hres = CONFIG_LCD_H_RES;
 const uint32_t panel_Vres = CONFIG_LCD_V_RES;
